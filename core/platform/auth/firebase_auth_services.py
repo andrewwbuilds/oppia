@@ -413,28 +413,17 @@ def associate_auth_id_with_user_id(
     assoc_by_auth_id_model.update_timestamps()
     assoc_by_auth_id_model.put()
 
-    # The {user_id: auth_id} mapping needs to be created, but the model used to
+    # The {user_id: auth_id} mapping needs to be created. The model used to
     # store the relationship might already exist because other services use it
-    # as well (e.g. user_services uses UserAuthDetailsModel.parent_user_id). In
-    # such situations, the return value of get_auth_id_from_user_id would be
-    # None, so that isn't strong enough to determine whether we need to create a
-    # new model rather than update an existing one.
-    #
-    # NOTE: We use get_multi(include_deleted=True) because get() returns None
-    # for models with deleted=True, but we need to make changes to those models
-    # when managing deletion.
-    (assoc_by_user_id_model,) = auth_models.UserAuthDetailsModel.get_multi(
-        [user_id], include_deleted=True
+    # as well (e.g. user_services uses UserAuthDetailsModel.parent_user_id).
+    # However, get_auth_id_from_user_id returned None above, even with
+    # include_deleted=True, so we know that such a model would not have a
+    # firebase_auth_id yet.
+    assoc_by_user_id_model = auth_models.UserAuthDetailsModel(
+        id=user_id, firebase_auth_id=auth_id
     )
-    if (
-        assoc_by_user_id_model is None
-        or assoc_by_user_id_model.firebase_auth_id is None
-    ):
-        assoc_by_user_id_model = auth_models.UserAuthDetailsModel(
-            id=user_id, firebase_auth_id=auth_id
-        )
-        assoc_by_user_id_model.update_timestamps()
-        assoc_by_user_id_model.put()
+    assoc_by_user_id_model.update_timestamps()
+    assoc_by_user_id_model.put()
 
 
 def associate_multi_auth_ids_with_user_ids(
@@ -481,29 +470,20 @@ def associate_multi_auth_ids_with_user_ids(
     )
     auth_models.UserIdByFirebaseAuthIdModel.put_multi(assoc_by_auth_id_models)
 
-    # The {user_id: auth_id} mapping needs to be created, but the model used to
+    # The {user_id: auth_id} mapping needs to be created. The model used to
     # store the relationship might already exist because other services use it
-    # as well (e.g. user_services uses UserAuthDetailsModel.parent_user_id). In
-    # such situations, the return value of get_multi_auth_ids_from_user_ids
-    # would be None, so that isn't strong enough to determine whether we need to
-    # create a new model rather than update an existing one.
+    # as well (e.g. user_services uses UserAuthDetailsModel.parent_user_id).
+    # However, get_multi_auth_ids_from_user_ids returned None for every user ID
+    # above, so we know that none of those models (other than ones marked as
+    # deleted) has a firebase_auth_id yet.
     assoc_by_user_id_models = [
         auth_models.UserAuthDetailsModel(id=user_id, firebase_auth_id=auth_id)
-        for auth_id, user_id, assoc_by_user_id_model in zip(
-            auth_ids,
-            user_ids,
-            auth_models.UserAuthDetailsModel.get_multi(user_ids),
-        )
-        if (
-            assoc_by_user_id_model is None
-            or assoc_by_user_id_model.firebase_auth_id is None
-        )
+        for auth_id, user_id in zip(auth_ids, user_ids)
     ]
-    if assoc_by_user_id_models:
-        auth_models.UserAuthDetailsModel.update_timestamps_multi(
-            assoc_by_user_id_models
-        )
-        auth_models.UserAuthDetailsModel.put_multi(assoc_by_user_id_models)
+    auth_models.UserAuthDetailsModel.update_timestamps_multi(
+        assoc_by_user_id_models
+    )
+    auth_models.UserAuthDetailsModel.put_multi(assoc_by_user_id_models)
 
 
 def grant_super_admin_privileges(user_id: str) -> None:

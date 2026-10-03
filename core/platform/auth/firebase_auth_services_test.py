@@ -1511,6 +1511,22 @@ class GenericAssociationTests(FirebaseAuthServicesTestBase):
                 auth_domain.AuthIdUserIdPair('aid', 'uid')
             )
 
+    def test_associate_when_user_auth_details_model_has_no_auth_id(
+        self,
+    ) -> None:
+        auth_models.UserAuthDetailsModel(id='uid', firebase_auth_id=None).put()
+
+        firebase_auth_services.associate_auth_id_with_user_id(
+            auth_domain.AuthIdUserIdPair('aid', 'uid')
+        )
+
+        self.assertEqual(
+            firebase_auth_services.get_user_id_from_auth_id('aid'), 'uid'
+        )
+        self.assertEqual(
+            firebase_auth_services.get_auth_id_from_user_id('uid'), 'aid'
+        )
+
     def test_associate_multi_without_collisions(self) -> None:
         firebase_auth_services.associate_multi_auth_ids_with_user_ids(
             [
@@ -1527,6 +1543,25 @@ class GenericAssociationTests(FirebaseAuthServicesTestBase):
                 firebase_auth_services.get_user_id_from_auth_id('aid3'),
             ],
             ['uid1', 'uid2', 'uid3'],
+        )
+
+    def test_associate_multi_when_user_auth_details_model_has_no_auth_id(
+        self,
+    ) -> None:
+        auth_models.UserAuthDetailsModel(id='uid1', firebase_auth_id=None).put()
+
+        firebase_auth_services.associate_multi_auth_ids_with_user_ids(
+            [
+                auth_domain.AuthIdUserIdPair('aid1', 'uid1'),
+                auth_domain.AuthIdUserIdPair('aid2', 'uid2'),
+            ]
+        )
+
+        self.assertEqual(
+            firebase_auth_services.get_multi_auth_ids_from_user_ids(
+                ['uid1', 'uid2']
+            ),
+            ['aid1', 'aid2'],
         )
 
     def test_associate_multi_with_user_id_collision_raises(self) -> None:
