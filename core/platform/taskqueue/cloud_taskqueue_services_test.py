@@ -150,3 +150,48 @@ class CloudTaskqueueServicesUnitTests(test_utils.TestBase):
                 scheduled_for=datetime_to_execute_task,
                 task_name=task_name,
             )
+
+    def test_http_task_without_payload_or_name_sends_correct_request(
+        self,
+    ) -> None:
+        queue_name = 'queue'
+        dummy_url = '/task/dummy_handler'
+        task_name = (
+            'projects/dev-project-id/locations/us-central1/queues/queue/'
+            'tasks/123'
+        )
+
+        # Here we use type Any because this method mocks the behaviour of
+        # cloud_taskqueue_services.CLIENT.create_task and in 'create_task'
+        # task is defined as Dict[str, Any].
+        def mock_create_task(
+            parent: str,
+            task: Dict[str, Any],
+            retry: Optional[retry_lib.Retry] = None,
+        ) -> CloudTaskqueueServicesUnitTests.Response:
+            self.assertIsInstance(retry, retry_lib.Retry)
+            self.assertEqual(
+                parent,
+                'projects/dev-project-id/locations/us-central1/queues/queue',
+            )
+            # Neither the JSON headers nor the body should be set when there
+            # is no payload, and the name is left for Cloud Tasks to assign.
+            self.assertEqual(
+                task,
+                {
+                    'app_engine_http_request': {
+                        'http_method': tasks_v2.types.HttpMethod.POST,
+                        'relative_uri': dummy_url,
+                    }
+                },
+            )
+            return self.Response(task_name)
+
+        with self.swap(
+            cloud_taskqueue_services.CLIENT, 'create_task', mock_create_task
+        ):
+            response = cloud_taskqueue_services.create_http_task(
+                queue_name, dummy_url
+            )
+
+        self.assertEqual(response.name, task_name)

@@ -96,15 +96,12 @@ def create_http_task(
     }
 
     if payload is not None:
-        payload_text = ''
-        if isinstance(payload, dict):
-            payload_text = json.dumps(payload)
-            task['app_engine_http_request']['headers'] = {
-                'Content-type': 'application/json'
-            }
+        task['app_engine_http_request']['headers'] = {
+            'Content-type': 'application/json'
+        }
 
         # The API expects a payload of type bytes.
-        converted_payload = payload_text.encode('utf-8')
+        converted_payload = json.dumps(payload).encode('utf-8')
 
         # Add the payload to the request.
         task['app_engine_http_request']['body'] = converted_payload
