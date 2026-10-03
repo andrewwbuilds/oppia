@@ -18,9 +18,11 @@
 
 from __future__ import annotations
 
+import datetime
 import re
 import time
 
+from core import utils
 from core.platform.taskqueue import cloud_tasks_emulator
 from core.tests import test_utils
 
@@ -203,3 +205,51 @@ class CloudTasksEmulatorUnitTests(test_utils.TestBase):
                 self.fail('No pattern matched for line: %s.' % line)
 
         self.assertEqual(matched, patterns)
+
+    def test_tasks_in_the_same_queue_are_ordered_by_scheduled_time(
+        self,
+    ) -> None:
+        current_datetime = utils.get_current_utc_datetime()
+        self.unit_test_emulator.create_task(
+            self.queue_name1,
+            self.url,
+            payload=self.payload1,
+            scheduled_for=current_datetime + datetime.timedelta(hours=2),
+            task_name='later_task',
+        )
+        self.unit_test_emulator.create_task(
+            self.queue_name1,
+            self.url,
+            payload=self.payload2,
+            scheduled_for=current_datetime + datetime.timedelta(hours=1),
+            task_name='earlier_task',
+        )
+
+        task_list = self.unit_test_emulator.get_tasks(
+            queue_name=self.queue_name1
+        )
+        self.assertEqual(
+            [task.name for task in task_list], ['earlier_task', 'later_task']
+        )
+
+    def test_tasks_scheduled_for_later_are_not_executed_early(self) -> None:
+        # The emulator reads naive datetimes as local time, so the task is
+        # scheduled a full day ahead to keep it in the future in any timezone.
+        self.dev_mode_emulator.create_task(
+            self.queue_name1,
+            self.url,
+            payload=self.payload1,
+            scheduled_for=(
+                utils.get_current_utc_datetime() + datetime.timedelta(days=1)
+            ),
+        )
+        # Give the queue thread time to check the pending task a few times.
+        time.sleep(0.5)
+
+        self.assertEqual(self.output, [])
+        self.assertEqual(
+            self.dev_mode_emulator.get_number_of_tasks(
+                queue_name=self.queue_name1
+            ),
+            1,
+        )
