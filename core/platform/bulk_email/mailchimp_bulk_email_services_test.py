@@ -96,6 +96,8 @@ class MailchimpServicesUnitTests(test_utils.GenericTestBase):
                         },
                     ]
                     self.tags = self.MailchimpTags()
+                    # The payload from the most recent call to update().
+                    self.latest_update_data: Dict[str, str] = {}
 
                 def get(
                     self, _list_id: str, subscriber_hash: str
@@ -150,6 +152,7 @@ class MailchimpServicesUnitTests(test_utils.GenericTestBase):
                             hash of subscriber's email ID.
                         data: dict. Payload received.
                     """
+                    self.latest_update_data = data
                     for user in self.users_data:
                         if user['email_hash'] == subscriber_hash:
                             user['status'] = data['status']
@@ -397,6 +400,18 @@ class MailchimpServicesUnitTests(test_utils.GenericTestBase):
             )
             self.assertFalse(return_status)
 
+            # Unsubscribing a user who is not in the list does not add them.
+            return_status = (
+                mailchimp_bulk_email_services.add_or_update_user_status(
+                    'test5@example.com',
+                    {},
+                    'Web',
+                    can_receive_email_updates=False,
+                )
+            )
+            self.assertTrue(return_status)
+            self.assertEqual(len(mailchimp.lists.members.users_data), 4)
+
             # Here we use MyPy ignore because attribute 'users_data' can only
             # accept Dict but for testing purposes here we are providing None
             # which causes mypy to throw an error. Thus to avoid the error, we
@@ -446,6 +461,21 @@ class MailchimpServicesUnitTests(test_utils.GenericTestBase):
             )
             self.assertEqual(
                 mailchimp.lists.members.tags.tag_names, ['Android']
+            )
+            self.assertEqual(
+                mailchimp.lists.members.latest_update_data['merge_fields'],
+                {'NAME': 'name'},
+            )
+
+            # The NAME merge field is left empty when no name is given.
+            mailchimp_bulk_email_services.add_or_update_user_status(
+                self.user_email_2,
+                {},
+                'Android',
+                can_receive_email_updates=True,
+            )
+            self.assertEqual(
+                mailchimp.lists.members.latest_update_data['merge_fields'], {}
             )
 
     @test_utils.set_platform_parameters(
@@ -512,6 +542,12 @@ class MailchimpServicesUnitTests(test_utils.GenericTestBase):
             self.assertEqual(len(mailchimp.lists.members.users_data), 3)
             mailchimp_bulk_email_services.permanently_delete_user_from_list(
                 self.user_email_1
+            )
+            self.assertEqual(len(mailchimp.lists.members.users_data), 2)
+
+            # Deleting a user who is not in the list does nothing.
+            mailchimp_bulk_email_services.permanently_delete_user_from_list(
+                self.user_email_3
             )
             self.assertEqual(len(mailchimp.lists.members.users_data), 2)
 
